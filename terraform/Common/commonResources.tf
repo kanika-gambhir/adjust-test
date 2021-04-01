@@ -46,7 +46,7 @@ spec:
     spec:
       containers:
       - name: ruby
-        image: docker.io/kanika02/rubyapp_adjust:$(imagetag)
+        image: $(imagetag)
         livenessProbe:
           exec:
             command: 
