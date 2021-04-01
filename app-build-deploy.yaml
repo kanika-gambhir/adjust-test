@@ -1,0 +1,73 @@
+
+#variable 'password' was defined in Variables tab
+#variable 'username' was defined in Variables tab
+#variable 'dockerid' was defined in Variables tab
+#variable 'ui_image' was defined in Variables tab
+#variable 'imagetag' was defined in Variables tab
+
+trigger: none
+pr: none
+
+pool:
+  vmImage: 'Ubuntu-16.04'
+
+
+jobs:
+ 
+- job: Build
+  displayName: "Build"
+  steps:
+  - task: Bash@3
+    inputs:
+      targetType: 'inline'
+      script: |
+        docker login -u $(username) -p $(password)
+        docker build  -f ./Dockerfile -t $(dockerid)/$(ui_image):$(imagetag) .
+        docker push $(dockerid)/$(ui_image):$(imagetag)
+
+  - task: Bash@3
+    name: outputs
+    inputs:
+      targetType: 'inline'
+      script: |
+        #!/bin/bash
+        echo "##vso[task.setvariable variable=imagetag;isOutput=true]$(imagetag)"
+
+- job: Deploy
+  displayName: "Deploy"
+  dependsOn: Build
+  variables:
+    imagetag: $[ dependencies.Build.outputs['outputs.imagetag'] ]
+  steps:
+  
+  - task: TerraformTaskV1@0
+    displayName: 'Terraform : INIT'
+    inputs:
+        provider: 'azurerm'
+        command: 'init'
+        workingDirectory: 'terraform'
+        backendServiceArm: 'az_subscription_id'
+        backendAzureRmResourceGroupName: 'resourcegroup'
+        backendAzureRmStorageAccountName: 'storageacc'
+        backendAzureRmContainerName: 'container'
+        backendAzureRmKey: 'aks.tfstate'
+ 
+  - task: TerraformTaskV1@0
+    displayName: 'Terraform : PLAN'
+    inputs:
+       provider: 'azurerm'
+       command: 'plan'
+       workingDirectory: 'terraform'
+       commandOptions: '-var "imagetag=$(imagetag)" -var "az_subscription_id=$(az_subscription_id)" -var "az_tenant_id=$(az_tenant_id)" -var "provider_client_id=$(provider_client_id)" -var "provider_client_secret=$(provider_client_secret)" -var "region=$(region)"  -var "project=$(project)" '
+       environmentServiceNameAzureRM: 'az_subscription_id'
+ 
+- task: TerraformTaskV1@0
+  displayName: 'Terraform : APPLY'
+  inputs:
+      provider: 'azurerm'
+      command: 'apply'
+      workingDirectory: 'terraform'
+      commandOptions: '-var "imagetag=$(imagetag)" -var "az_subscription_id=$(az_subscription_id)" -var "az_tenant_id=$(az_tenant_id)" -var "provider_client_id=$(provider_client_id)" -var "provider_client_secret=$(provider_client_secret)" -var "region=$(region)" -var "project=$(project)" '
+      environmentServiceNameAzureRM: 'az_subscription_id'
+
+  
